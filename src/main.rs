@@ -1,4 +1,7 @@
-use std::{fs, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    env, fs,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -11,7 +14,8 @@ fn save_yaaw(yaaw: &Vec<YelledAboutAndWhen>) {
     std::fs::write(
         "yelled_about_and_when.json",
         serde_json::to_string(yaaw).unwrap(),
-    ).expect("Failed to save yelled about and when");
+    )
+    .expect("Failed to save yelled about and when");
 }
 
 fn load_yaaw() -> Vec<YelledAboutAndWhen> {
@@ -30,7 +34,8 @@ pub async fn main() {
         println!("exiting");
         fs::remove_file("yaaw.lock").expect("failed to remove lock file");
         std::process::exit(0);
-    }).expect("failed to set Ctrl-C handler");
+    })
+    .expect("failed to set Ctrl-C handler");
 
     let mut yelled_about_and_when = load_yaaw();
 
@@ -39,9 +44,15 @@ pub async fn main() {
         return;
     }
     fs::write("yaaw.lock", "").expect("failed to write lock file");
+
+    let webhook_url = env::var("DISCORD_WEBHOOK_URL").ok();
+    if webhook_url.is_none() {
+        println!("DISCORD_WEBHOOK_URL not set!");
+    }
+
     loop {
         println!("Querying servers");
-        query_and_validate(&mut yelled_about_and_when, None).await;
+        query_and_validate(&mut yelled_about_and_when, &webhook_url).await;
         save_yaaw(&yelled_about_and_when);
         tokio::time::sleep(tokio::time::Duration::from_secs(QUERY_INTEVAL_MINUTES * 60)).await;
     }
@@ -53,7 +64,10 @@ struct YelledAboutAndWhen {
     when: SystemTime,
 }
 
-async fn query_and_validate(already_yelled_about: &mut Vec<YelledAboutAndWhen>, webhook: Option<&str>) {
+async fn query_and_validate(
+    already_yelled_about: &mut Vec<YelledAboutAndWhen>,
+    webhook: &Option<String>,
+) {
     let data = fetch_compile_data::fetch_server_data().await;
 
     for (server, compile_data) in data {
@@ -108,10 +122,22 @@ async fn query_and_validate(already_yelled_about: &mut Vec<YelledAboutAndWhen>, 
 }
 
 async fn post_to_webhook(message: &str, webhook: &str) {
+    let json = format!("{{\"content\":\"{}\"}}", message);
+    println!("{}", json.escape_debug());
     let client = reqwest::Client::new();
-    let _ = client
+    let response = client
         .post(webhook)
-        .body(format!("{{\"content\":\"{}\"}}", message))
+        .header("user-agent", "Yaaw")
+        .header("content-type", "application/json")
+        .query(&[("wait", true)])
+        .body(json)
         .send()
-        .await;
+        .await
+        .expect("failed to post message");
+    if !response.status().is_success() {
+        println!(
+            "Failed to post message to webhook: {}",
+            response.text().await.unwrap()
+        );
+    }
 }
