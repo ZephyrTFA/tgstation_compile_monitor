@@ -13,7 +13,15 @@ pub struct GlobalCompileData {
 pub struct ServerCompileData {
     pub revision: Option<String>,
     pub revision_date: Option<String>,
+    #[serde(rename = "serverdata")]
+    server_data: ServerData,
     error: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct ServerData {
+    #[serde(rename = "dbname")]
+    db_name: Option<String>,
 }
 
 const TGSTATION_ENDPOINT: &str = "https://tgstation13.download/serverinfo.json";
@@ -25,6 +33,9 @@ pub async fn fetch_server_data() -> HashMap<String, ServerCompileData> {
             .expect("failed to parse data");
     json.servers
         .into_iter()
-        .filter(|(_, x)| x.error.is_none())
+        .filter(|(_, x)| {
+            x.error.is_none() && x.revision_date.as_ref().is_some_and(|f| !f.is_empty())
+        })
+        .map(|(_, v)| (v.server_data.db_name.as_ref().unwrap().clone(), v))
         .collect()
 }
