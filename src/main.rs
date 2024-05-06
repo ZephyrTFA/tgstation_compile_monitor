@@ -87,13 +87,12 @@ async fn query_and_validate(
         };
 
         let revision_date = revision_date.timestamp() as u64;
-        if SystemTime::now()
+        let elapsed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
-            - revision_date
-            > (ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS * 60 * 60)
-        {
+            - revision_date;
+        if elapsed > (ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS * 60 * 60) {
             let yaaw = already_yelled_about.iter().position(|x| x.server == server);
             if yaaw.is_some() {
                 let yaaw = yaaw.unwrap();
@@ -111,11 +110,14 @@ async fn query_and_validate(
             });
 
             let message = format!(
-                "**__/TG/__station Compile Monitor**\n
+                "**/TG/station Compile Monitor**\n
                 `{}` has not updated in `{}` hours.\n
-                It last updated on `{}`.\n
+                It last updated on `{} ({}h ago).\n
                 This error will not repeat until the server updates or 24 hours have passed.",
-                server, ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS, compile_data.revision_date.as_ref().unwrap()
+                server,
+                ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS,
+                compile_data.revision_date.as_ref().unwrap(),
+                elapsed / 3600,
             );
             if let Some(webhook) = webhook {
                 post_to_webhook(&message, webhook).await;
