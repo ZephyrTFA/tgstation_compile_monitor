@@ -75,6 +75,7 @@ async fn query_and_validate(
         // revision date is in ISO 8601 format
         let revision_date = match compile_data
             .revision_date
+            .as_ref()
             .unwrap()
             .parse::<chrono::DateTime<chrono::FixedOffset>>()
         {
@@ -110,8 +111,11 @@ async fn query_and_validate(
             });
 
             let message = format!(
-                "{} has not updated in {} hours.\nThis error will not repeat until the server updates or 24 hours have passed.",
-                server, ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS
+                "**__/TG/__station Compile Monitor**\n
+                `{}` has not updated in `{}` hours.\n
+                It last updated on `{}`.\n
+                This error will not repeat until the server updates or 24 hours have passed.",
+                server, ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS, compile_data.revision_date.as_ref().unwrap()
             );
             if let Some(webhook) = webhook {
                 post_to_webhook(&message, webhook).await;
@@ -121,16 +125,22 @@ async fn query_and_validate(
     }
 }
 
+#[derive(Serialize)]
+struct WebhookPostData {
+    content: String,
+}
+
 async fn post_to_webhook(message: &str, webhook: &str) {
-    let json = format!("{{\"content\":\"{}\"}}", message);
-    println!("{}", json.escape_debug());
+    let data: WebhookPostData = WebhookPostData {
+        content: message.to_string(),
+    };
     let client = reqwest::Client::new();
     let response = client
         .post(webhook)
         .header("user-agent", "Yaaw")
         .header("content-type", "application/json")
         .query(&[("wait", true)])
-        .body(json)
+        .json(&data)
         .send()
         .await
         .expect("failed to post message");
