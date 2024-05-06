@@ -5,5 +5,6 @@ if [ -f "service.pid" ]; then
     rm service.pid
 fi
 git pull
-nohup cargo run --release > service.log 2>&1 &
+cargo run --release > service.log 2>&1 &
 echo $! > service.pid
+fg
