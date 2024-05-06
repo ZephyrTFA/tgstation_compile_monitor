@@ -112,7 +112,7 @@ async fn query_and_validate(
             let message = format!(
                 "**/TG/station Compile Monitor**\n
                 `{}` has not updated in `{}` hours.\n
-                It last updated on `{} ({}h ago).\n
+                It last updated on `{} ({}h ago)`.\n
                 This error will not repeat until the server updates or 24 hours have passed.",
                 server,
                 ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS,
