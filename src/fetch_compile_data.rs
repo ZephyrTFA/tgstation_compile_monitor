@@ -13,6 +13,8 @@ pub struct GlobalCompileData {
 pub struct ServerCompileData {
     pub revision: Option<String>,
     pub revision_date: Option<String>,
+    // in deci-secs
+    round_duration: Option<u64>,
     #[serde(rename = "serverdata")]
     server_data: ServerData,
     error: Option<bool>,
@@ -34,7 +36,20 @@ pub async fn fetch_server_data() -> HashMap<String, ServerCompileData> {
     json.servers
         .into_iter()
         .filter(|(_, x)| {
-            x.error.is_none() && x.revision_date.as_ref().is_some_and(|f| !f.is_empty())
+            if x.error.is_some() {
+                return false;
+            }
+            if x.revision_date.as_ref().is_none() {
+                return false;
+            }
+            if x.revision_date.as_ref().unwrap().is_empty() {
+                return false;
+            }
+            // ignore servers that have a round going on for longer than 2 hours
+            if x.round_duration.is_some_and(|x| x > 2 * 60 * 60 * 10) {
+                return false;
+            }
+            true
         })
         .map(|(_, v)| (v.server_data.db_name.as_ref().unwrap().clone(), v))
         .collect()
