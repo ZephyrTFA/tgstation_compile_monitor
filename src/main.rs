@@ -1,9 +1,10 @@
 use std::{
-    env, fs,
+    env, fs, process,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
+use sysinfo::{Pid, System};
 
 mod fetch_compile_data;
 
@@ -39,11 +40,21 @@ pub async fn main() {
 
     let mut yelled_about_and_when = load_yaaw();
 
-    if fs::metadata("yaaw.lock").is_ok() {
-        println!("already running");
-        return;
+    if let Ok(contents) = fs::read_to_string("yaaw.lock") {
+        let them_pid = Pid::from_u32(contents.parse::<u32>().expect("failed to parse lock file"));
+        let me_pid = Pid::from_u32(process::id());
+        let mut system = System::new();
+        system.refresh_process(them_pid);
+        system.refresh_process(me_pid);
+
+        let them = system.process(them_pid);
+        let me = system.process(me_pid);
+        if them.is_some_and(|x| x.name() == me.expect("failed to get self process info").name()) {
+            println!("Yaaw is already running");
+            process::exit(1);
+        }
     }
-    fs::write("yaaw.lock", "").expect("failed to write lock file");
+    fs::write("yaaw.lock", process::id().to_string()).expect("failed to write lock file");
 
     let webhook_url = env::var("DISCORD_WEBHOOK_URL").ok();
     if webhook_url.is_none() {
@@ -110,10 +121,7 @@ async fn query_and_validate(
             });
 
             let message = format!(
-                "**/TG/station Compile Monitor**\n
-                `{}` has not updated in `{}` hours.\n
-                It last updated on `{} ({}h ago)`.\n
-                This error will not repeat until the server updates or 24 hours have passed.",
+                "**/TG/station Compile Monitor**\n`{}` has not updated in `{}` hours.\nIt last updated on `{} ({}h ago)`.\nThis error will not repeat until the server updates or 24 hours have passed.",
                 server,
                 ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS,
                 compile_data.revision_date.as_ref().unwrap(),
