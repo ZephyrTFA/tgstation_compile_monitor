@@ -53,6 +53,7 @@ pub async fn main() {
             println!("Yaaw is already running");
             process::exit(1);
         }
+        println!("ignoring yaaw.lock: process {} is not running", them_pid);
     }
     fs::write("yaaw.lock", process::id().to_string()).expect("failed to write lock file");
 
