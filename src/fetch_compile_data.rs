@@ -3,6 +3,8 @@ use std::collections::HashMap;
 
 #[derive(Deserialize)]
 pub struct GlobalCompileData {
+    #[serde(rename = "refreshtime")]
+    _refreshtime: u64,
     #[serde(flatten)]
     servers: HashMap<String, ServerCompileData>,
 }
