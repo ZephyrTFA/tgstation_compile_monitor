@@ -3,53 +3,17 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use conf::TargetInfo;
-use serde::{Deserialize, Serialize};
 use sysinfo::{Pid, System};
+use yaaw::{load_yaaw, save_yaaw, YelledAboutAndWhen};
+
+use crate::webhook::post_to_webhook;
 
 mod conf;
 mod fetch_compile_data;
+mod webhook;
+mod yaaw;
 
 const QUERY_INTEVAL_MINUTES: u64 = 60;
-
-fn save_yaaw(yaaw: &Vec<YelledAboutAndWhen>) {
-    let webhook_url = yaaw.first().map(|x| x.webhook.clone());
-    if webhook_url.is_none() {
-        println!("no data to save");
-        return;
-    }
-
-    let webhook_id = webhook_url_to_id(&webhook_url.unwrap());
-    // ensure the directory exists
-    fs::create_dir_all("./yaaw").expect("failed to create yaaw directory");
-    serde_json::to_writer(
-        &fs::File::create(format!("./yaaw/{}.json", webhook_id))
-            .expect("failed to create yaaw file."),
-        yaaw,
-    )
-    .expect("failed to write yaaw file.");
-}
-
-fn load_yaaw(webhook_url: &str) -> Vec<YelledAboutAndWhen> {
-    let webhook_id = webhook_url_to_id(webhook_url);
-    println!("loading yaaw for {}", webhook_id);
-    let file = std::fs::read(format!("./yaaw/{}.json", webhook_id));
-    if let Ok(file) = file {
-        serde_json::from_slice(&file).unwrap()
-    } else {
-        Vec::new()
-    }
-}
-
-fn webhook_url_to_id(webhook_url: &str) -> String {
-    let webhook_parts: Vec<&str> = webhook_url.split('/').collect();
-    webhook_parts
-        .iter()
-        .rev()
-        .nth(1)
-        .expect("failed to extract webhook id")
-        .to_string()
-}
 
 #[tokio::main]
 pub async fn main() {
@@ -101,13 +65,6 @@ pub async fn main() {
     }
 }
 
-#[derive(Deserialize, Serialize)]
-struct YelledAboutAndWhen {
-    webhook: String,
-    server: String,
-    when: SystemTime,
-}
-
 async fn query_and_validate(
     already_yelled_about: &mut Vec<YelledAboutAndWhen>,
     cfg: &conf::TargetInfo,
@@ -126,21 +83,16 @@ async fn query_and_validate(
             continue;
         }
 
-        if compile_data.revision_date.is_none() {
+        if compile_data.revision_date().is_none() {
             println!("{} has no revision date", server);
             continue;
         }
-        println!(
-            "{} - {}",
-            server,
-            compile_data.revision_date.as_ref().unwrap()
-        );
+        println!("{} - {}", server, compile_data.revision_date().unwrap());
 
-        assert!(compile_data.revision_date.is_some());
+        assert!(compile_data.revision_date().is_some());
         // revision date is in ISO 8601 format
         let revision_date = match compile_data
-            .revision_date
-            .as_ref()
+            .revision_date()
             .unwrap()
             .parse::<chrono::DateTime<chrono::FixedOffset>>()
         {
@@ -165,10 +117,12 @@ async fn query_and_validate(
 
         let elapsed_threshold = cfg.error_revision_date_unchanged_for_hours();
         if elapsed > (elapsed_threshold * 60 * 60) {
-            let yaaw = already_yelled_about.iter().position(|x| x.server == server);
+            let yaaw = already_yelled_about
+                .iter()
+                .position(|x| x.server() == server);
             if yaaw.is_some() {
                 let yaaw = yaaw.unwrap();
-                let when = already_yelled_about[yaaw].when;
+                let when = already_yelled_about[yaaw].when();
                 let elapsed = SystemTime::now().duration_since(when).unwrap().as_secs();
                 if elapsed < (24 * 60 * 60) {
                     continue;
@@ -176,51 +130,21 @@ async fn query_and_validate(
                 already_yelled_about.remove(yaaw);
             }
 
-            already_yelled_about.push(YelledAboutAndWhen {
-                webhook: cfg.webhook_url().to_string(),
-                server: server.clone(),
-                when: SystemTime::now(),
-            });
+            already_yelled_about.push(YelledAboutAndWhen::new(
+                cfg.webhook_url(),
+                &server,
+                SystemTime::now(),
+            ));
 
             let message = format!(
                 "`{}` has not updated in `{}` hours.\nIt last updated on `{} ({}h ago)`.\nThis error will not repeat until the server updates or 24 hours have passed.",
-                server,
+                &server,
                 elapsed_threshold,
-                compile_data.revision_date.as_ref().unwrap(),
+                compile_data.revision_date().unwrap(),
                 elapsed / 3600,
             );
             post_to_webhook(&message, cfg).await;
             println!("sent to webhook, failed to update");
         }
-    }
-}
-
-#[derive(Serialize)]
-struct WebhookPostData {
-    content: String,
-    username: Option<String>,
-}
-
-async fn post_to_webhook(message: &str, cfg: &TargetInfo) {
-    let data: WebhookPostData = WebhookPostData {
-        content: message.to_string(),
-        username: cfg.name_override().clone(),
-    };
-
-    let client = reqwest::Client::new();
-    let response = client
-        .post(cfg.webhook_url())
-        .header("user-agent", "Yaaw")
-        .header("content-type", "application/json")
-        .query(&[("wait", true)])
-        .json(&data)
-        .send()
-        .await
-        .expect("failed to post message");
-    if !response.status().is_success() {
-        println!(
-            "Failed to post message to webhook: {}",
-            response.text().await.unwrap()
-        );
     }
 }

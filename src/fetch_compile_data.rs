@@ -3,16 +3,14 @@ use std::collections::HashMap;
 
 #[derive(Deserialize)]
 pub struct GlobalCompileData {
-    pub refreshtime: u64,
     #[serde(flatten)]
-    pub servers: HashMap<String, ServerCompileData>,
+    servers: HashMap<String, ServerCompileData>,
 }
 
 // there is a lot more data in the json response, but we only care about these fields
 #[derive(Deserialize)]
 pub struct ServerCompileData {
-    pub revision: Option<String>,
-    pub revision_date: Option<String>,
+    revision_date: Option<String>,
     // in deci-secs
     round_duration: Option<u64>,
     #[serde(rename = "serverdata")]
@@ -21,6 +19,10 @@ pub struct ServerCompileData {
 }
 
 impl ServerCompileData {
+    pub fn revision_date(&self) -> Option<&String> {
+        self.revision_date.as_ref()
+    }
+
     pub fn is_extended_round(&self) -> bool {
         self.round_duration.is_some_and(|x| x > 2 * 60 * 60 * 10)
     }
