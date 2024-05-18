@@ -7,8 +7,8 @@ use conf::TargetInfo;
 use serde::{Deserialize, Serialize};
 use sysinfo::{Pid, System};
 
-mod fetch_compile_data;
 mod conf;
+mod fetch_compile_data;
 
 const QUERY_INTEVAL_MINUTES: u64 = 60;
 
@@ -18,23 +18,20 @@ fn save_yaaw(yaaw: &Vec<YelledAboutAndWhen>) {
         println!("no webhook url to save");
         return;
     }
-    
-    let webhook_url = webhook_url.unwrap();
-    let webhook_parts: Vec<&str> = webhook_url.split("/").collect();
-    let webhook_id = webhook_parts.iter().rev().nth(1).expect("failed to extract webhook id");
 
+    let webhook_id = webhook_url_to_id(&webhook_url.unwrap());
     // ensure the directory exists
     fs::create_dir_all("./yaaw").expect("failed to create yaaw directory");
-    serde_json::to_writer(&
-        fs::File::create(format!("./yaaw/{}.json", webhook_id)).expect("failed to create yaaw file."),
+    serde_json::to_writer(
+        &fs::File::create(format!("./yaaw/{}.json", webhook_id))
+            .expect("failed to create yaaw file."),
         yaaw,
-    ).expect("failed to write yaaw file.");
+    )
+    .expect("failed to write yaaw file.");
 }
 
 fn load_yaaw(webhook_url: &str) -> Vec<YelledAboutAndWhen> {
-    let webhook_parts: Vec<&str> = webhook_url.split("/").collect();
-    let webhook_id = webhook_parts.iter().rev().nth(1).expect("failed to extract webhook id");
-
+    let webhook_id = webhook_url_to_id(webhook_url);
     println!("loading yaaw for {}", webhook_id);
     let file = std::fs::read(format!("./yaaw/{}.json", webhook_id));
     if let Ok(file) = file {
@@ -42,6 +39,16 @@ fn load_yaaw(webhook_url: &str) -> Vec<YelledAboutAndWhen> {
     } else {
         Vec::new()
     }
+}
+
+fn webhook_url_to_id(webhook_url: &str) -> String {
+    let webhook_parts: Vec<&str> = webhook_url.split('/').collect();
+    webhook_parts
+        .iter()
+        .rev()
+        .nth(1)
+        .expect("failed to extract webhook id")
+        .to_string()
 }
 
 #[tokio::main]
@@ -54,7 +61,10 @@ pub async fn main() {
     })
     .expect("failed to set Ctrl-C handler");
 
-    println!("Working directory: {}", std::env::current_dir().unwrap().display());
+    println!(
+        "Working directory: {}",
+        std::env::current_dir().unwrap().display()
+    );
     if let Ok(contents) = fs::read_to_string("yaaw.lock") {
         let them_pid = Pid::from_u32(contents.parse::<u32>().expect("failed to parse lock file"));
         let me_pid = Pid::from_u32(process::id());
@@ -84,7 +94,7 @@ pub async fn main() {
         for target in &cfg {
             let webhook_url = target.webhook_url();
             let mut yaaw = load_yaaw(webhook_url);
-            query_and_validate(&mut yaaw, &target).await;
+            query_and_validate(&mut yaaw, target).await;
             save_yaaw(&yaaw);
         }
         tokio::time::sleep(tokio::time::Duration::from_secs(QUERY_INTEVAL_MINUTES * 60)).await;
@@ -121,7 +131,11 @@ async fn query_and_validate(
             println!("{} has no revision date", server);
             continue;
         }
-        println!("{} - {}", server, compile_data.revision_date.as_ref().unwrap());
+        println!(
+            "{} - {}",
+            server,
+            compile_data.revision_date.as_ref().unwrap()
+        );
 
         assert!(compile_data.revision_date.is_some());
         // revision date is in ISO 8601 format
@@ -188,7 +202,7 @@ async fn post_to_webhook(message: &str, cfg: &TargetInfo) {
         content: message.to_string(),
         username: cfg.name_override().clone(),
     };
-    
+
     let client = reqwest::Client::new();
     let response = client
         .post(cfg.webhook_url())
