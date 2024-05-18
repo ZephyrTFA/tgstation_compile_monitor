@@ -13,9 +13,15 @@ mod conf;
 const QUERY_INTEVAL_MINUTES: u64 = 60;
 
 fn save_yaaw(yaaw: &Vec<YelledAboutAndWhen>) {
-    let webhook_url = yaaw.first().map(|x| x.webhook.clone()).expect("yaaw did not have webhook url");
+    let webhook_url = yaaw.first().map(|x| x.webhook.clone());
+    if webhook_url.is_none() {
+        println!("no webhook url to save");
+        return;
+    }
+    
+    let webhook_url = webhook_url.unwrap();
     let webhook_parts: Vec<&str> = webhook_url.split("/").collect();
-    let webhook_id = webhook_parts.iter().rev().nth(2).expect("failed to extract webhook id");
+    let webhook_id = webhook_parts.iter().rev().nth(1).expect("failed to extract webhook id");
 
     // ensure the directory exists
     fs::create_dir_all("./yaaw").expect("failed to create yaaw directory");
@@ -24,8 +30,9 @@ fn save_yaaw(yaaw: &Vec<YelledAboutAndWhen>) {
 
 fn load_yaaw(webhook_url: &str) -> Vec<YelledAboutAndWhen> {
     let webhook_parts: Vec<&str> = webhook_url.split("/").collect();
-    let webhook_id = webhook_parts.iter().rev().nth(2).expect("failed to extract webhook id");
+    let webhook_id = webhook_parts.iter().rev().nth(1).expect("failed to extract webhook id");
 
+    println!("loading yaaw for {}", webhook_id);
     let file = std::fs::read(format!("./yaaw/{}.json", webhook_id));
     if let Ok(file) = file {
         serde_json::from_slice(&file).unwrap()
@@ -162,7 +169,7 @@ async fn query_and_validate(
                 elapsed / 3600,
             );
             post_to_webhook(&message, cfg).await;
-            println!("{}", message);
+            println!("sent to webhook, failed to update");
         }
     }
 }
