@@ -153,7 +153,7 @@ async fn query_and_validate(
             });
 
             let message = format!(
-                "**/TG/station Compile Monitor**\n`{}` has not updated in `{}` hours.\nIt last updated on `{} ({}h ago)`.\nThis error will not repeat until the server updates or 24 hours have passed.",
+                "`{}` has not updated in `{}` hours.\nIt last updated on `{} ({}h ago)`.\nThis error will not repeat until the server updates or 24 hours have passed.",
                 server,
                 elapsed_threshold,
                 compile_data.revision_date.as_ref().unwrap(),
