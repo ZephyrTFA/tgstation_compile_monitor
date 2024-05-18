@@ -93,6 +93,12 @@ async fn query_and_validate(
     println!("Fetching server data for {}", cfg.webhook_url());
     let data = fetch_compile_data::fetch_server_data().await;
 
+    for wanted in cfg.target_servers() {
+        if !data.contains_key(wanted) {
+            println!("{} was not found in server information", wanted);
+        }
+    }
+
     for (server, compile_data) in data {
         if !cfg.target_servers().contains(&server) {
             println!("{} is not a target server", server);
