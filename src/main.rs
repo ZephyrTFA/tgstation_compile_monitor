@@ -13,11 +13,13 @@ mod conf;
 const QUERY_INTEVAL_MINUTES: u64 = 60;
 
 fn save_yaaw(yaaw: &Vec<YelledAboutAndWhen>) {
-    std::fs::write(
-        "yelled_about_and_when.json",
-        serde_json::to_string(yaaw).unwrap(),
-    )
-    .expect("Failed to save yelled about and when");
+    let webhook_url = yaaw.first().map(|x| x.webhook.clone()).expect("yaaw did not have webhook url");
+    let webhook_parts: Vec<&str> = webhook_url.split("/").collect();
+    let webhook_id = webhook_parts.iter().rev().nth(2).expect("failed to extract webhook id");
+
+    // ensure the directory exists
+    fs::create_dir_all("./yaaw").expect("failed to create yaaw directory");
+    fs::File::create(format!("./yaaw/{}.json", webhook_id)).expect("failed to create yaaw file.");
 }
 
 fn load_yaaw(webhook_url: &str) -> Vec<YelledAboutAndWhen> {
