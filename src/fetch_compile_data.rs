@@ -27,7 +27,6 @@ struct ServerData {
 }
 
 const TGSTATION_ENDPOINT: &str = "https://tgstation13.download/serverinfo.json";
-const IGNORE_SERVERS: [&str; 1] = ["TGMC"];
 
 pub async fn fetch_server_data() -> HashMap<String, ServerCompileData> {
     let response = reqwest::get(TGSTATION_ENDPOINT).await.unwrap();
@@ -38,9 +37,6 @@ pub async fn fetch_server_data() -> HashMap<String, ServerCompileData> {
         .into_iter()
         .filter(|(_, x)| {
             if x.error.is_some() {
-                return false;
-            }
-            if IGNORE_SERVERS.contains(&x.server_data.db_name.as_ref().unwrap().as_str()) {
                 return false;
             }
             if x.revision_date.as_ref().is_none() {

@@ -3,13 +3,14 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use conf::TargetInfo;
 use serde::{Deserialize, Serialize};
 use sysinfo::{Pid, System};
 
 mod fetch_compile_data;
+mod conf;
 
 const QUERY_INTEVAL_MINUTES: u64 = 60;
-const ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS: u64 = 24;
 
 fn save_yaaw(yaaw: &Vec<YelledAboutAndWhen>) {
     std::fs::write(
@@ -19,8 +20,11 @@ fn save_yaaw(yaaw: &Vec<YelledAboutAndWhen>) {
     .expect("Failed to save yelled about and when");
 }
 
-fn load_yaaw() -> Vec<YelledAboutAndWhen> {
-    let file = std::fs::read("yelled_about_and_when.json");
+fn load_yaaw(webhook_url: &str) -> Vec<YelledAboutAndWhen> {
+    let webhook_parts: Vec<&str> = webhook_url.split("/").collect();
+    let webhook_id = webhook_parts.iter().rev().nth(2).expect("failed to extract webhook id");
+
+    let file = std::fs::read(format!("./yaaw/{}.json", webhook_id));
     if let Ok(file) = file {
         serde_json::from_slice(&file).unwrap()
     } else {
@@ -38,8 +42,7 @@ pub async fn main() {
     })
     .expect("failed to set Ctrl-C handler");
 
-    let mut yelled_about_and_when = load_yaaw();
-
+    println!("Working directory: {}", std::env::current_dir().unwrap().display());
     if let Ok(contents) = fs::read_to_string("yaaw.lock") {
         let them_pid = Pid::from_u32(contents.parse::<u32>().expect("failed to parse lock file"));
         let me_pid = Pid::from_u32(process::id());
@@ -62,27 +65,46 @@ pub async fn main() {
         println!("DISCORD_WEBHOOK_URL not set!");
     }
 
+    let cfg = conf::TargetInfo::load_from("config.json");
+
     loop {
         println!("Querying servers");
-        query_and_validate(&mut yelled_about_and_when, &webhook_url).await;
-        save_yaaw(&yelled_about_and_when);
+        for target in &cfg {
+            let webhook_url = target.webhook_url();
+            let mut yaaw = load_yaaw(webhook_url);
+            query_and_validate(&mut yaaw, &target).await;
+            save_yaaw(&yaaw);
+        }
         tokio::time::sleep(tokio::time::Duration::from_secs(QUERY_INTEVAL_MINUTES * 60)).await;
     }
 }
 
 #[derive(Deserialize, Serialize)]
 struct YelledAboutAndWhen {
+    webhook: String,
     server: String,
     when: SystemTime,
 }
 
 async fn query_and_validate(
     already_yelled_about: &mut Vec<YelledAboutAndWhen>,
-    webhook: &Option<String>,
+    cfg: &conf::TargetInfo,
 ) {
+    println!("Fetching server data for {}", cfg.webhook_url());
     let data = fetch_compile_data::fetch_server_data().await;
 
     for (server, compile_data) in data {
+        if !cfg.target_servers().contains(&server) {
+            println!("{} is not a target server", server);
+            continue;
+        }
+
+        if compile_data.revision_date.is_none() {
+            println!("{} has no revision date", server);
+            continue;
+        }
+        println!("{} - {}", server, compile_data.revision_date.as_ref().unwrap());
+
         assert!(compile_data.revision_date.is_some());
         // revision date is in ISO 8601 format
         let revision_date = match compile_data
@@ -104,7 +126,9 @@ async fn query_and_validate(
             .unwrap()
             .as_secs()
             - revision_date;
-        if elapsed > (ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS * 60 * 60) {
+
+        let elapsed_threshold = cfg.error_revision_date_unchanged_for_hours();
+        if elapsed > (elapsed_threshold * 60 * 60) {
             let yaaw = already_yelled_about.iter().position(|x| x.server == server);
             if yaaw.is_some() {
                 let yaaw = yaaw.unwrap();
@@ -117,6 +141,7 @@ async fn query_and_validate(
             }
 
             already_yelled_about.push(YelledAboutAndWhen {
+                webhook: cfg.webhook_url().to_string(),
                 server: server.clone(),
                 when: SystemTime::now(),
             });
@@ -124,13 +149,11 @@ async fn query_and_validate(
             let message = format!(
                 "**/TG/station Compile Monitor**\n`{}` has not updated in `{}` hours.\nIt last updated on `{} ({}h ago)`.\nThis error will not repeat until the server updates or 24 hours have passed.",
                 server,
-                ERROR_REVISION_DATE_UNCHANGED_FOR_HOURS,
+                elapsed_threshold,
                 compile_data.revision_date.as_ref().unwrap(),
                 elapsed / 3600,
             );
-            if let Some(webhook) = webhook {
-                post_to_webhook(&message, webhook).await;
-            }
+            post_to_webhook(&message, cfg).await;
             println!("{}", message);
         }
     }
@@ -139,15 +162,18 @@ async fn query_and_validate(
 #[derive(Serialize)]
 struct WebhookPostData {
     content: String,
+    username: Option<String>,
 }
 
-async fn post_to_webhook(message: &str, webhook: &str) {
+async fn post_to_webhook(message: &str, cfg: &TargetInfo) {
     let data: WebhookPostData = WebhookPostData {
         content: message.to_string(),
+        username: cfg.name_override().clone(),
     };
+    
     let client = reqwest::Client::new();
     let response = client
-        .post(webhook)
+        .post(cfg.webhook_url())
         .header("user-agent", "Yaaw")
         .header("content-type", "application/json")
         .query(&[("wait", true)])
