@@ -20,6 +20,12 @@ pub struct ServerCompileData {
     error: Option<bool>,
 }
 
+impl ServerCompileData {
+    pub fn is_extended_round(&self) -> bool {
+        self.round_duration.is_some_and(|x| x > 2 * 60 * 60 * 10)
+    }
+}
+
 #[derive(Deserialize)]
 struct ServerData {
     #[serde(rename = "dbname")]
@@ -43,11 +49,6 @@ pub async fn fetch_server_data() -> HashMap<String, ServerCompileData> {
                 return false;
             }
             if x.revision_date.as_ref().unwrap().is_empty() {
-                return false;
-            }
-            // ignore servers that have a round going on for longer than 2 hours
-            if x.round_duration.is_some_and(|x| x > 2 * 60 * 60 * 10) {
-                println!("ignoring {} because of extended round for over 2 hours", x.server_data.db_name.as_ref().unwrap());
                 return false;
             }
             true

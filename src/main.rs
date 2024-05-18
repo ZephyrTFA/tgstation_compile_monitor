@@ -152,6 +152,11 @@ async fn query_and_validate(
             }
         };
 
+        if compile_data.is_extended_round() {
+            println!("{} is experiencing an extended round, skipping.", server);
+            continue;
+        }
+
         let revision_date = revision_date.timestamp() as u64;
         let elapsed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
