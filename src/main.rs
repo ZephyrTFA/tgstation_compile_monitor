@@ -136,13 +136,17 @@ async fn query_and_validate(
                 SystemTime::now(),
             ));
 
-            let message = format!(
+            let mut message = format!(
                 "`{}` has not updated in `{}` hours.\nIt last updated on `{} ({}h ago)`.\nThis error will not repeat until the server updates or 24 hours have passed.",
                 &server,
                 elapsed_threshold,
                 compile_data.revision_date().unwrap(),
                 elapsed / 3600,
             );
+            if let Some(ping_role_id) = cfg.ping_role_id() {
+                message = format!("<@&{}>\n{}", ping_role_id, message);
+            }
+
             post_to_webhook(&message, cfg).await;
             println!("sent to webhook, failed to update");
         }

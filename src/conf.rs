@@ -4,6 +4,7 @@ pub struct TargetInfo {
     webhook_url: String,
     error_revision_date_unchanged_for_hours: u64,
     target_servers: Vec<String>,
+    ping_role_id: Option<String>,
 }
 
 impl TargetInfo {
@@ -28,5 +29,9 @@ impl TargetInfo {
 
     pub fn target_servers(&self) -> &Vec<String> {
         &self.target_servers
+    }
+
+    pub fn ping_role_id(&self) -> Option<&String> {
+        self.ping_role_id.as_ref()
     }
 }
