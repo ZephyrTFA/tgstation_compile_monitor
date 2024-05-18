@@ -25,7 +25,10 @@ fn save_yaaw(yaaw: &Vec<YelledAboutAndWhen>) {
 
     // ensure the directory exists
     fs::create_dir_all("./yaaw").expect("failed to create yaaw directory");
-    fs::File::create(format!("./yaaw/{}.json", webhook_id)).expect("failed to create yaaw file.");
+    serde_json::to_writer(&
+        fs::File::create(format!("./yaaw/{}.json", webhook_id)).expect("failed to create yaaw file."),
+        yaaw,
+    ).expect("failed to write yaaw file.");
 }
 
 fn load_yaaw(webhook_url: &str) -> Vec<YelledAboutAndWhen> {
