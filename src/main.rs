@@ -15,7 +15,7 @@ const QUERY_INTEVAL_MINUTES: u64 = 60;
 fn save_yaaw(yaaw: &Vec<YelledAboutAndWhen>) {
     let webhook_url = yaaw.first().map(|x| x.webhook.clone());
     if webhook_url.is_none() {
-        println!("no webhook url to save");
+        println!("no data to save");
         return;
     }
 
