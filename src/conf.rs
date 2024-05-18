@@ -8,7 +8,7 @@ pub struct TargetInfo {
 
 impl TargetInfo {
     pub fn load_from(file: &str) -> Vec<Self> {
-        let file = std::fs::read_to_string(file).unwrap();
+        let file = std::fs::read_to_string(file).expect(format!("failed to read from cfg file: {}", file).as_str());
         let data: Vec<Self> = serde_json::from_str(&file).unwrap();
         data
     }
