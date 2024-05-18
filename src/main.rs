@@ -123,7 +123,6 @@ async fn query_and_validate(
 
     for (server, compile_data) in data {
         if !cfg.target_servers().contains(&server) {
-            println!("{} is not a target server", server);
             continue;
         }
 
