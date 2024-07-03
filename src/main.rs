@@ -106,7 +106,7 @@ async fn query_and_validate(
             let elapsed_threshold = cfg.error_revision_date_unchanged_for_hours();
             let last_updated_hours_ago = elapsed / 3600;
             if elapsed > (elapsed_threshold * 60 * 60) {
-                fail_reason = Some(format!("Server has not updated in `{elapsed_threshold}` hours; last updated on `{revision_timestamp} ({last_updated_hours_ago}h ago)`"));
+                fail_reason = Some(format!("Server has not updated in `{elapsed_threshold}` hours; last updated on `{revision_timestamp} ({last_updated_hours_ago}h ago)`."));
             }
         }
 
@@ -131,7 +131,7 @@ async fn query_and_validate(
             ));
 
             let mut message = format!(
-                "`{}` failed validation.\n{fail_reason}.\nThis error will not repeat until the server updates or 24 hours have passed.",
+                "`{}` failed validation.\n{fail_reason}\nThis error will not repeat until the server updates or 24 hours have passed.",
                 &server,
             );
             if let Some(ping_role_id) = cfg.ping_role_id() {
