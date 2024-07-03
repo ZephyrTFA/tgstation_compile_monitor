@@ -89,7 +89,13 @@ async fn query_and_validate(
         }
         println!("{} - {}", server, compile_data.revision_date().unwrap());
 
-        assert!(compile_data.revision_date().is_some());
+        let mut fail_reason = None;
+
+        let revision_date = compile_data.revision_date();
+        if revision_date.is_none() {
+            fail_reason = Some("No revision date information was returned. This is a mis-configuration.".to_string())
+        } else {
+
         // revision date is in ISO 8601 format
         let revision_date = match compile_data
             .revision_date()
@@ -116,15 +122,23 @@ async fn query_and_validate(
             - revision_date;
 
         let elapsed_threshold = cfg.error_revision_date_unchanged_for_hours();
+        let last_updated = compile_data.revision_date().unwrap();
+        let last_updated_hours_ago = elapsed / 3600;
         if elapsed > (elapsed_threshold * 60 * 60) {
+            fail_reason = Some(format!("Server has not updated in `{elapsed_threshold}` hours; last updated on `{last_updated} ({last_updated_hours_ago}h ago)`"));
+        }
+    }
+
+    if let Some(fail_reason) = fail_reason 
+         {
             let yaaw = already_yelled_about
                 .iter()
                 .position(|x| x.server() == server);
             if yaaw.is_some() {
                 let yaaw = yaaw.unwrap();
                 let when = already_yelled_about[yaaw].when();
-                let elapsed = SystemTime::now().duration_since(when).unwrap().as_secs();
-                if elapsed < (24 * 60 * 60) {
+                let time_since_last = SystemTime::now().duration_since(when).unwrap().as_secs();
+                if time_since_last < (24 * 60 * 60) {
                     continue;
                 }
                 already_yelled_about.remove(yaaw);
@@ -137,11 +151,8 @@ async fn query_and_validate(
             ));
 
             let mut message = format!(
-                "`{}` has not updated in `{}` hours.\nIt last updated on `{} ({}h ago)`.\nThis error will not repeat until the server updates or 24 hours have passed.",
+                "`{}` failed validation.\n{fail_reason}.\nThis error will not repeat until the server updates or 24 hours have passed.",
                 &server,
-                elapsed_threshold,
-                compile_data.revision_date().unwrap(),
-                elapsed / 3600,
             );
             if let Some(ping_role_id) = cfg.ping_role_id() {
                 message = format!("<@&{}>\n{}", ping_role_id, message);
