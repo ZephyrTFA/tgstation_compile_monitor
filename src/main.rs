@@ -83,54 +83,34 @@ async fn query_and_validate(
             continue;
         }
 
-        if compile_data.revision_date().is_none() {
-            println!("{} has no revision date", server);
-            continue;
-        }
-        println!("{} - {}", server, compile_data.revision_date().unwrap());
-
         let mut fail_reason = None;
 
-        let revision_date = compile_data.revision_date();
-        if revision_date.is_none() {
-            fail_reason = Some("No revision date information was returned. This is a mis-configuration.".to_string())
+        let revision_date = compile_data.revision_timestamp();
+        if let Err(reason) = revision_date {
+            fail_reason = Some(format!(
+                "Revision date information was invalid: `{reason}`."
+            ))
         } else {
-
-        // revision date is in ISO 8601 format
-        let revision_date = match compile_data
-            .revision_date()
-            .unwrap()
-            .parse::<chrono::DateTime<chrono::FixedOffset>>()
-        {
-            Ok(date) => date,
-            Err(_) => {
-                println!("{} has an invalid revision date", server);
+            let revision_timestamp = revision_date.unwrap();
+            if compile_data.is_extended_round() {
+                println!("{} is experiencing an extended round, skipping.", server);
                 continue;
             }
-        };
 
-        if compile_data.is_extended_round() {
-            println!("{} is experiencing an extended round, skipping.", server);
-            continue;
+            let elapsed = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                - revision_timestamp;
+
+            let elapsed_threshold = cfg.error_revision_date_unchanged_for_hours();
+            let last_updated_hours_ago = elapsed / 3600;
+            if elapsed > (elapsed_threshold * 60 * 60) {
+                fail_reason = Some(format!("Server has not updated in `{elapsed_threshold}` hours; last updated on `{revision_timestamp} ({last_updated_hours_ago}h ago)`"));
+            }
         }
 
-        let revision_date = revision_date.timestamp() as u64;
-        let elapsed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            - revision_date;
-
-        let elapsed_threshold = cfg.error_revision_date_unchanged_for_hours();
-        let last_updated = compile_data.revision_date().unwrap();
-        let last_updated_hours_ago = elapsed / 3600;
-        if elapsed > (elapsed_threshold * 60 * 60) {
-            fail_reason = Some(format!("Server has not updated in `{elapsed_threshold}` hours; last updated on `{last_updated} ({last_updated_hours_ago}h ago)`"));
-        }
-    }
-
-    if let Some(fail_reason) = fail_reason 
-         {
+        if let Some(fail_reason) = fail_reason {
             let yaaw = already_yelled_about
                 .iter()
                 .position(|x| x.server() == server);
@@ -159,6 +139,7 @@ async fn query_and_validate(
             }
 
             post_to_webhook(&message, cfg).await;
+            println!("{}", &message);
             println!("sent to webhook, failed to update");
         }
     }

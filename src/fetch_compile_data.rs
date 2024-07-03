@@ -1,3 +1,4 @@
+use chrono::DateTime;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -21,8 +22,21 @@ pub struct ServerCompileData {
 }
 
 impl ServerCompileData {
-    pub fn revision_date(&self) -> Option<&String> {
-        self.revision_date.as_ref()
+    pub fn revision_timestamp(&self) -> Result<u64, String> {
+        if self.revision_date.is_none()
+            || self.revision_date.as_ref().is_some_and(|rd| rd.is_empty())
+        {
+            return Err(
+                "Revision date was not provided. This is a misconfiguration of the server."
+                    .to_string(),
+            );
+        }
+        return DateTime::parse_from_str(
+            self.revision_date.as_ref().unwrap(),
+            "%Y-%m-%dT%H:%M:%S%z",
+        )
+        .map(|dt| dt.timestamp() as u64)
+        .map_err(|err| err.to_string());
     }
 
     pub fn is_extended_round(&self) -> bool {
