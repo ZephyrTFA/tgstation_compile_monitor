@@ -52,5 +52,11 @@ pub async fn fetch_server_data() -> HashMap<String, ServerCompileData> {
             true
         })
         .map(|(_, v)| (v.server_data.db_name.as_ref().unwrap().clone(), v))
+        .map(|(name, mut data)| {
+            if data.revision_date.as_ref().is_some_and(|rd| rd.is_empty()) {
+                data.revision_date = None;
+            }
+            (name, data)
+        })
         .collect()
 }
